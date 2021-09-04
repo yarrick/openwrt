@@ -311,6 +311,7 @@ static void rtl93xx_phylink_validate(struct dsa_switch *ds, int port,
 	    state->interface != PHY_INTERFACE_MODE_XGMII &&
 	    state->interface != PHY_INTERFACE_MODE_HSGMII &&
 	    state->interface != PHY_INTERFACE_MODE_10GKR &&
+	    state->interface != PHY_INTERFACE_MODE_USXGMII &&
 	    state->interface != PHY_INTERFACE_MODE_INTERNAL &&
 	    state->interface != PHY_INTERFACE_MODE_SGMII) {
 		bitmap_zero(supported, __ETHTOOL_LINK_MODE_MASK_NBITS);
@@ -338,6 +339,8 @@ static void rtl93xx_phylink_validate(struct dsa_switch *ds, int port,
 	/* On the RTL9300 family of SoCs, ports 26 to 27 may be SFP ports TODO: take out of .dts */
 	if (port >= 26 && port <= 27)
 		phylink_set(mask, 1000baseX_Full);
+	if (port >= 26 && port <= 27)
+		phylink_set(mask, 10000baseKR_Full);
 
 	phylink_set(mask, 10baseT_Half);
 	phylink_set(mask, 10baseT_Full);
@@ -584,14 +587,14 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 {
 	struct rtl838x_switch_priv *priv = ds->priv;
 	int sds_num, sds_mode;
-	u32 reg, v;
-	u32 *p1 = 0xb8003308, *p2 = 0xb800330c;
+	u32 reg;
+//	u32 *p1 = 0xb8003308, *p2 = 0xb800330c;
 
 	pr_info("%s port %d, mode %x, phy-mode: %s, speed %d, link %d\n", __func__,
 		port, mode, phy_modes(state->interface), state->speed, state->link);
-	pr_info("%s: %08x %08x\n", __func__, *p1, *p2);
-	*p1 |= BIT(15);
-	*p2 &= ~BIT(15);
+//	pr_info("%s: %08x %08x\n", __func__, *p1, *p2);
+//	*p1 |= BIT(15);
+//	*p2 &= ~BIT(15);
 
 	// BUG: Make this work on RTL93XX
 	if (priv->family_id >= RTL9310_FAMILY_ID)
@@ -601,6 +604,9 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 	if (port == priv->cpu_port)
 		return;
 
+	reg = sw_r32(priv->r->mac_force_mode_ctrl(port));
+	reg &= ~(0xf << 3);
+
 	// On the RTL930X, ports 24 to 27 are using an internal SerDes
 	if (port >=24 && port <= 27) {
 		sds_num = port - 18; // Port 24 mapped to SerDes 6, 25 to 7 ...
@@ -609,13 +615,15 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 			sds_mode = 0x12;
 			break;
 		case PHY_INTERFACE_MODE_1000BASEX:
-			sds_mode = 0x04;
+			sds_mode = 0x1b;  // 10G 1000X Auto
 			break;
 		case PHY_INTERFACE_MODE_XGMII:
 			sds_mode = 0x10;
 			break;
 		case PHY_INTERFACE_MODE_10GKR:
-			sds_mode = 0x1b;
+			sds_mode = 0x1a;
+			// We need to use media sel for fibre media:
+			reg |= BIT(16);
 			break;
 		case PHY_INTERFACE_MODE_USXGMII:
 			sds_mode = 0x0d;
@@ -628,23 +636,24 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 		rtl9300_sds_rst(sds_num, sds_mode);
 	}
 
-	reg = sw_r32(priv->r->mac_force_mode_ctrl(port));
-	reg &= ~(0xf << 3);
 	switch (state->speed) {
 	case SPEED_10000:
 		reg |= 4 << 3;
+		break;
+	case SPEED_5000:
+		reg |= 6 << 3;
 		break;
 	case SPEED_2500:
 		reg |= 5 << 3;
 		break;
 	case SPEED_1000:
-		pr_info("Setting PHY speed to 1000M\n");
+		pr_info("Setting PHY speed to 1000M\n"); /*
 		// BUG: SDS-num is hard-coded!
 		v = rtl930x_read_sds_phy(8, 2, 0);
 		v &= ~(BIT(6) | BIT(13));
 		v |= BIT(6);
 		rtl930x_write_sds_phy(8, 2, 0, v);
-
+*/
 		reg |= 2 << 3;
 		break;
 	default:

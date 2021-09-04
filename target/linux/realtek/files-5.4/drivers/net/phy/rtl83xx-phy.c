@@ -219,7 +219,7 @@ void rtl9300_sds_rst(int sds_num, u32 mode)
 		       0x02A4, 0x02A4, 0x0198, 0x0198 };
 	u8  lsb[]  = { 0, 6, 12, 18, 0, 6, 12, 18, 0, 6, 0, 6};
 
-	pr_info("SerDes: %s %d\n", __func__, mode);
+	pr_info("%s SerDes: %d mode %x\n", __func__, sds_num, mode);
 	if (sds_num < 0 || sds_num > 11) {
 		pr_err("Wrong SerDes number: %d\n", sds_num);
 		return;
@@ -284,7 +284,7 @@ int rtl930x_read_sds_phy(int phy_addr, int page, int phy_reg)
 	int i;
 	u32 cmd = phy_addr << 2 | page << 7 | phy_reg << 13 | 1;
 
-	pr_debug("%s: phy_addr(SDS-ID) %d, phy_reg: %d\n", __func__, phy_addr, phy_reg);
+	pr_info("%s: phy_addr(SDS-ID) %d, phy_reg: %d\n", __func__, phy_addr, phy_reg);
 	sw_w32(cmd, RTL930X_SDS_INDACS_CMD);
 
 	for (i = 0; i < 100; i++) {
@@ -305,6 +305,7 @@ int rtl930x_write_sds_phy(int phy_addr, int page, int phy_reg, u16 v)
 	int i;
 	u32 cmd;
 
+	pr_info("%s: phy_addr(SDS-ID) %d, phy_reg: %d\n", __func__, phy_addr, phy_reg);
 	sw_w32(v, RTL930X_SDS_INDACS_DATA);
 	cmd = phy_addr << 2 | page << 7 | phy_reg << 13 | 0x3;
 
@@ -2092,7 +2093,7 @@ int rtl9300_configure_serdes(struct phy_device *phydev)
 
 	// ----> dal_longan_sds_mode_set
 	phydev_info(phydev, "Configuring internal RTL9300 SERDES %d\n", sds_num);
-
+/*
 	pr_info("%s: enabling link as speed 1G, link down\n", __func__);
 	mode = sw_r32(RTL930X_MAC_FORCE_MODE_CTRL + 4 * phy_addr);
 	pr_info("%s, RTL930X_MAC_FORCE_MODE_CTRL : %08x\n", __func__, v);
@@ -2129,7 +2130,7 @@ int rtl9300_configure_serdes(struct phy_device *phydev)
 	 rtl9300_sds_clock_config();
 
 	// <----- dal_longan_sds_mode_set
-
+ */
 	/* Set default Medium to fibre */
 	v = rtl930x_read_sds_phy(sds_num, 0x1f, 11);
 	if (v < 0) {
@@ -2244,7 +2245,7 @@ static int rtl8218d_phy_probe(struct phy_device *phydev)
 	struct rtl838x_phy_priv *priv;
 	int addr = phydev->mdio.addr;
 
-	pr_debug("%s: id: %d\n", __func__, addr);
+	pr_info("%s: id: %d\n", __func__, addr);
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
@@ -2350,6 +2351,7 @@ static int rtl9300_serdes_probe(struct phy_device *phydev)
 	struct rtl838x_phy_priv *priv;
 	int addr = phydev->mdio.addr;
 
+	pr_info("%s: %d\n", __func__, addr);
 	if (soc_info.family != RTL9300_FAMILY_ID)
 		return -ENODEV;
 

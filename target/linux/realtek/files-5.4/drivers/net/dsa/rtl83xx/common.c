@@ -307,28 +307,27 @@ static int __init rtl83xx_mdio_probe(struct rtl838x_switch_priv *priv)
 		if (of_property_read_u32(dn, "reg", &pn))
 			continue;
 
+		if (of_property_read_bool(dn, "phy-is-integrated"))
+			priv->ports[pn].phy_is_integrated = true;
+
 		// Check for the integrated SerDes of the RTL8380M first
-		if (of_property_read_bool(dn, "phy-is-integrated")
-			&& priv->id == 0x8380 && pn >= 24) {
+		if (priv->ports[pn].phy_is_integrated && priv->id == 0x8380 && pn >= 24) {
 			pr_debug("----> FÓUND A SERDES\n");
 			priv->ports[pn].phy = PHY_RTL838X_SDS;
 			continue;
 		}
 
-		if (of_property_read_bool(dn, "phy-is-integrated")
-			&& !of_property_read_bool(dn, "sfp")) {
+		if (priv->ports[pn].phy_is_integrated && !of_property_read_bool(dn, "sfp")) {
 			priv->ports[pn].phy = PHY_RTL8218B_INT;
 			continue;
 		}
 
-		if (!of_property_read_bool(dn, "phy-is-integrated")
-			&& of_property_read_bool(dn, "sfp")) {
+		if (!priv->ports[pn].phy_is_integrated && of_property_read_bool(dn, "sfp")) {
 			priv->ports[pn].phy = PHY_RTL8214FC;
 			continue;
 		}
 
-		if (!of_property_read_bool(dn, "phy-is-integrated")
-			&& !of_property_read_bool(dn, "sfp")) {
+		if (!priv->ports[pn].phy_is_integrated && !of_property_read_bool(dn, "sfp")) {
 			priv->ports[pn].phy = PHY_RTL8218B_EXT;
 			continue;
 		}

@@ -83,7 +83,7 @@ Signed-off-by: Russell King <rmk+kernel@armlinux.org.uk>
 +	if (phy->is_c45)
 +		interface = PHY_INTERFACE_MODE_NA;
 +
-+	ret = phylink_bringup_phy(pl, phy, interface);
++	pr_info("F\n"); ret = phylink_bringup_phy(pl, phy, interface);
  	if (ret)
  		phy_detach(phy);
  

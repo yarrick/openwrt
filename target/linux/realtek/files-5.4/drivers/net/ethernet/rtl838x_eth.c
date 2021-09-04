@@ -103,8 +103,8 @@ static void rtl838x_create_tx_header(struct p_hdr *h, int dest_port, int prio)
 
 	if (dest_port > 0) {
 		// cpu_tag[0] is reserved on the RTL83XX SoCs
-		h->cpu_tag[1] = 0x0400;
-		h->cpu_tag[2] = 0x0200;
+		h->cpu_tag[1] = 0x0401;  // BIT 10: RTL8380_CPU_TAG, BIT0: L2LEARNING on
+		h->cpu_tag[2] = 0x0200;  // Set only AS_DPM, to enable DPM settings below
 		h->cpu_tag[3] = 0x0000;
 		h->cpu_tag[4] = BIT(dest_port) >> 16;
 		h->cpu_tag[5] = BIT(dest_port) & 0xffff;
@@ -120,7 +120,7 @@ static void rtl839x_create_tx_header(struct p_hdr *h, int dest_port, int prio)
 
 	if (dest_port > 0) {
 		// cpu_tag[0] is reserved on the RTL83XX SoCs
-		h->cpu_tag[1] = 0x0100;
+		h->cpu_tag[1] = 0x0100; // RTL8390_CPU_TAG marker
 		h->cpu_tag[2] = h->cpu_tag[3] = h->cpu_tag[4] = h->cpu_tag[5] = 0;
 		// h->cpu_tag[1] |= BIT(1) | BIT(0); // Bypass filter 1/2
 		if (dest_port >= 32) {
@@ -131,7 +131,8 @@ static void rtl839x_create_tx_header(struct p_hdr *h, int dest_port, int prio)
 			h->cpu_tag[4] = BIT(dest_port) >> 16;
 			h->cpu_tag[5] = BIT(dest_port) & 0xffff;
 		}
-		h->cpu_tag[2] |= BIT(5); // Enable destination port mask use
+		h->cpu_tag[2] |= BIT(20); // Enable destination port mask use
+		h->cpu_tag[2] |= BIT(23); // Enable L2 Learning
 		// Set internal priority and AS_PRIO
 		if (prio >= 0)
 			h->cpu_tag[1] |= prio | BIT(3);
@@ -140,10 +141,10 @@ static void rtl839x_create_tx_header(struct p_hdr *h, int dest_port, int prio)
 
 static void rtl930x_create_tx_header(struct p_hdr *h, int dest_port, int prio)
 {
-	h->cpu_tag[0] = 0x8000;
+	h->cpu_tag[0] = 0x8000;  // CPU tag marker
 	h->cpu_tag[1] = h->cpu_tag[2] = 0;
 	if (prio >= 0)
-		h->cpu_tag[2] = BIT(13) | prio << 8; // Enable and set  Priority Queue
+		h->cpu_tag[2] = BIT(13) | prio << 8; // Enable and set Priority Queue
 	h->cpu_tag[3] = 0;
 	h->cpu_tag[4] = 0;
 	h->cpu_tag[5] = 0;
@@ -153,10 +154,10 @@ static void rtl930x_create_tx_header(struct p_hdr *h, int dest_port, int prio)
 
 static void rtl931x_create_tx_header(struct p_hdr *h, int dest_port, int prio)
 {
-	h->cpu_tag[0] = 0x8000;
+	h->cpu_tag[0] = 0x8000;  // CPU tag marker
 	h->cpu_tag[1] = h->cpu_tag[2] = 0;
 	if (prio >= 0)
-		h->cpu_tag[2] = BIT(13) | prio << 8; // Enable and set  Priority Queue
+		h->cpu_tag[2] = BIT(13) | prio << 8; // Enable and set Priority Queue
 	h->cpu_tag[3] = 0;
 	h->cpu_tag[4] = h->cpu_tag[5] = h->cpu_tag[6] = h->cpu_tag[7] = 0;
 	if (dest_port >= 32) {
@@ -201,6 +202,7 @@ struct rtl838x_eth_priv {
 	u8 smi_bus[MAX_PORTS];
 	u8 smi_addr[MAX_PORTS];
 	bool smi_bus_isc45[MAX_SMI_BUSSES];
+	bool phy_is_internal[MAX_PORTS];
 };
 
 extern int rtl838x_phy_init(struct rtl838x_eth_priv *priv);
@@ -1393,7 +1395,8 @@ static void rtl838x_validate(struct phylink_config *config,
 {
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
-	pr_debug("In %s\n", __func__);
+	pr_info("In %s, state is %d (%s)", __func__, state->interface,
+		phy_modes(state->interface));
 
 	if (!phy_interface_mode_is_rgmii(state->interface) &&
 	    state->interface != PHY_INTERFACE_MODE_1000BASEX &&
@@ -1644,16 +1647,20 @@ static int rtl930x_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
 {
 	u32 val;
 	int err;
+	struct rtl838x_eth_priv *priv = bus->priv;
 
-	// TODO: These are hard-coded for the 2 Fibre Ports of the XGS1210
-	if (mii_id >= 26 && mii_id <= 27)
+	if (priv->phy_is_internal[mii_id])
 		return rtl930x_read_sds_phy(mii_id - 23, 0, regnum);
 
 	if (regnum & MII_ADDR_C45) {
 		regnum &= ~MII_ADDR_C45;
 		err = rtl930x_read_mmd_phy(mii_id, regnum >> 16, regnum & 0xffff, &val);
+		pr_debug("MMD: %d register %d read %x, err %d\n", mii_id, regnum & 0xffff, val, err);
 	} else {
 		err = rtl930x_read_phy(mii_id, 0, regnum, &val);
+		pr_debug("PHY: %d register %d read %x, err %d\n", mii_id, regnum, val, err);
+/*		if (mii_id < 2 && regnum == 2)
+			dump_stack();*/
 	}
 	if (err)
 		return err;
@@ -1664,10 +1671,6 @@ static int rtl931x_mdio_read(struct mii_bus *bus, int mii_id, int regnum)
 {
 	u32 val;
 	int err;
-//	struct rtl838x_eth_priv *priv = bus->priv;
-
-//	if (mii_id >= 48 && mii_id <= 49 && priv->id == 0x8393)
-//		return rtl839x_read_sds_phy(mii_id, regnum);
 
 	err = rtl931x_read_phy(mii_id, 0, regnum, &val);
 	if (err)
@@ -1704,10 +1707,14 @@ static int rtl839x_mdio_write(struct mii_bus *bus, int mii_id,
 static int rtl930x_mdio_write(struct mii_bus *bus, int mii_id,
 			      int regnum, u16 value)
 {
-//	struct rtl838x_eth_priv *priv = bus->priv;
+	struct rtl838x_eth_priv *priv = bus->priv;
 
-//	if (mii_id >= 48 && mii_id <= 49 && priv->id == 0x8393)
-//		return rtl839x_write_sds_phy(mii_id, regnum, value);
+/*	if (priv->phy_is_internal[mii_id]) {
+		pr_info("Writing to internal phy %d\n", mii_id); 
+		return rtl930x_write_sds_phy(mii_id - 23, 0, regnum, value);
+	}
+*/
+
 	if (regnum & MII_ADDR_C45) {
 		regnum &= ~MII_ADDR_C45;
 		return rtl930x_write_mmd_phy(mii_id, regnum >> 16, regnum & 0xffff, value);
@@ -1802,12 +1809,14 @@ static int rtl930x_mdio_reset(struct mii_bus *bus)
 	pr_info("c45_mask: %08x\n", c45_mask);
 	sw_w32_mask(0, c45_mask, RTL930X_SMI_GLB_CTRL);
 
-	// Ports 24 and 25 are 2.5 Gig, set this type (1)
-	sw_w32_mask(0x7 << 12, 1 << 12, RTL930X_SMI_MAC_TYPE_CTRL);
-	sw_w32_mask(0x7 << 15, 1 << 15, RTL930X_SMI_MAC_TYPE_CTRL);
-	// Ports 26 and 27 are 10 Gig SerDes, set this type (0)
-	sw_w32_mask(0x7 << 18, 0, RTL930X_SMI_MAC_TYPE_CTRL);
-	sw_w32_mask(0x7 << 21, 0, RTL930X_SMI_MAC_TYPE_CTRL);
+	// Ports 24 to 27 are 2.5 or 10Gig, set this type (1) or (0) for internal SerDes
+	for (i = 24; i < 28; i++) {
+		pos = (i - 24) * 3 + 12;
+		if (priv->phy_is_internal[i])
+			sw_w32_mask(0x7 << pos, 0 << pos, RTL930X_SMI_MAC_TYPE_CTRL);
+		else
+			sw_w32_mask(0x7 << pos, 1 << pos, RTL930X_SMI_MAC_TYPE_CTRL);
+	}
 
 	// TODO: Set up RTL9300_SMI_10GPHY_POLLING_SEL_0_ADDR for Aquantia PHYs on 1250
 
@@ -1890,6 +1899,11 @@ static int rtl838x_mdio_init(struct rtl838x_eth_priv *priv)
 
 		if (of_device_is_compatible(dn, "ethernet-phy-ieee802.3-c45"))
 			priv->smi_bus_isc45[smi_addr[0]] = true;
+
+		if (of_property_read_bool(dn, "phy-is-integrated")) {
+			priv->phy_is_internal[pn] = true;
+		}
+
 	}
 
 	snprintf(priv->mii_bus->id, MII_BUS_ID_SIZE, "%pOFn", mii_np);

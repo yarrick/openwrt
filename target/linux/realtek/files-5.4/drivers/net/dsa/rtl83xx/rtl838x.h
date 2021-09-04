@@ -444,6 +444,7 @@ struct rtl838x_port {
 	enum phy_type phy;
 	bool is10G;
 	bool is2G5;
+	bool phy_is_integrated;
 	const struct dsa_port *dp;
 };
 
