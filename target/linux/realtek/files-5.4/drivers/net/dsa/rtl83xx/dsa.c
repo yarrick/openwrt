@@ -296,6 +296,8 @@ static void rtl93xx_phylink_validate(struct dsa_switch *ds, int port,
 				     unsigned long *supported,
 				     struct phylink_link_state *state)
 {
+	struct rtl838x_switch_priv *priv = ds->priv;
+	int sds;
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
 	pr_info("In %s port %d, state is %d (%s)", __func__, port, state->interface,
@@ -321,6 +323,12 @@ static void rtl93xx_phylink_validate(struct dsa_switch *ds, int port,
 		return;
 	}
 
+	// Identify the SDS of the port, ports < 24 have SDS ID 2, 24-27 use SDS 6-8
+	sds = 2;
+	if (port >= 24)
+		sds = port - 18;
+	pr_info("%s: SDS %d, is integrated %d\n",  __func__, sds, priv->ports[port].phy_is_integrated);
+
 	/* Allow all the expected bits */
 	phylink_set(mask, Autoneg);
 	phylink_set_port_modes(mask);
@@ -336,16 +344,30 @@ static void rtl93xx_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, 1000baseT_Half);
 	}
 
-	/* On the RTL9300 family of SoCs, ports 26 to 27 may be SFP ports TODO: take out of .dts */
-	if (port >= 26 && port <= 27)
-		phylink_set(mask, 1000baseX_Full);
-	if (port >= 26 && port <= 27)
-		phylink_set(mask, 10000baseKR_Full);
-
-	phylink_set(mask, 10baseT_Half);
-	phylink_set(mask, 10baseT_Full);
-	phylink_set(mask, 100baseT_Half);
-	phylink_set(mask, 100baseT_Full);
+	/* On the RTL9300 family of SoCs, ports 26 to 27 may be SFP ports if integrated,
+	 * ports 24-27 are always 10GBit capable
+	 */
+	if (port >= 24 && port <= 27) {
+		dump_stack();
+		if (!priv->ports[port].phy_is_integrated) {
+			phylink_set(mask, 1000baseT_Full);
+			phylink_set(mask, 2500baseT_Full);
+			phylink_set(mask, 5000baseT_Full);
+			phylink_set(mask, 10000baseT_Full);
+			phylink_set(mask, 10baseT_Half);
+			phylink_set(mask, 10baseT_Full);
+			phylink_set(mask, 100baseT_Half);
+			phylink_set(mask, 100baseT_Full);
+		} else {
+			phylink_set(mask, 1000baseX_Full);
+			phylink_set(mask, 10000baseKR_Full);
+		}
+	} else {
+		phylink_set(mask, 10baseT_Half);
+		phylink_set(mask, 10baseT_Full);
+		phylink_set(mask, 100baseT_Half);
+		phylink_set(mask, 100baseT_Full);
+	}
 
 	bitmap_and(supported, supported, mask,
 		   __ETHTOOL_LINK_MODE_MASK_NBITS);
@@ -592,9 +614,6 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 
 	pr_info("%s port %d, mode %x, phy-mode: %s, speed %d, link %d\n", __func__,
 		port, mode, phy_modes(state->interface), state->speed, state->link);
-//	pr_info("%s: %08x %08x\n", __func__, *p1, *p2);
-//	*p1 |= BIT(15);
-//	*p2 &= ~BIT(15);
 
 	// BUG: Make this work on RTL93XX
 	if (priv->family_id >= RTL9310_FAMILY_ID)
@@ -616,14 +635,14 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 			break;
 		case PHY_INTERFACE_MODE_1000BASEX:
 			sds_mode = 0x1b;  // 10G 1000X Auto
+			reg |= BIT(16); // Use media sel for fibre media
 			break;
 		case PHY_INTERFACE_MODE_XGMII:
 			sds_mode = 0x10;
 			break;
 		case PHY_INTERFACE_MODE_10GKR:
 			sds_mode = 0x1a;
-			// We need to use media sel for fibre media:
-			reg |= BIT(16);
+			reg |= BIT(16); // Use media sel for fibre media
 			break;
 		case PHY_INTERFACE_MODE_USXGMII:
 			sds_mode = 0x0d;
@@ -633,7 +652,7 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 			       __func__, phy_modes(state->interface));
 			return;
 		}
-		rtl9300_sds_rst(sds_num, sds_mode);
+	//	rtl9300_sds_rst(sds_num, sds_mode);
 	}
 
 	switch (state->speed) {
@@ -667,7 +686,9 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 	if (state->duplex == DUPLEX_FULL)
 			reg |= BIT(2);
 
-	reg |= 1; // Force Link up
+	reg |= FORCE_EN; // Enable MAC
+
+	pr_info("%s: writing mac_force_mode_ctrl: %08x\n", __func__, reg);
 	sw_w32(reg, priv->r->mac_force_mode_ctrl(port));
 }
 
