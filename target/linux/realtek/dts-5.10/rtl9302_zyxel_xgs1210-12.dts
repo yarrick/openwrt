@@ -102,10 +102,13 @@
 				label = "jffs2";
 				reg = <0x200000 0x100000>;
 			};
-			partition@b260000 {
-				label = "firmware";
-				reg = <0x300000 0xd00000>;
-				compatible = "denx,uimage";
+			partition@300000 {
+				label = "firmware1";
+				reg = <0x300000 0x680000>;
+			};
+			partition@980000 {
+				label = "firmware2";
+				reg = <0x980000 0x680000>;
 			};
 		};
 	};
