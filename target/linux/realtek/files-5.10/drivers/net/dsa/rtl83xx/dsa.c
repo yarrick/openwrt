@@ -771,6 +771,9 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 		case PHY_INTERFACE_MODE_1000BASEX:
 			sds_mode = 0x04;
 			break;
+		case PHY_INTERFACE_MODE_SGMII:
+			sds_mode = 0x02;
+			break;
 		case PHY_INTERFACE_MODE_XGMII:
 			sds_mode = 0x10;
 			break;
