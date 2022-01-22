@@ -604,7 +604,7 @@ struct rtl838x_port {
 	bool phy_is_integrated;
 	bool is10G;
 	bool is2G5;
-	int sds_num;
+	u8 sds_num;
 	const struct dsa_port *dp;
 };
 
