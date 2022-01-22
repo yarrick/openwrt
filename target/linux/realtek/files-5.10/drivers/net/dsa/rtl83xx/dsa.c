@@ -374,6 +374,7 @@ static void rtl93xx_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, 1000baseX_Full);
 		phylink_set(mask, 10000baseKR_Full);
 		phylink_set(mask, 10000baseSR_Full);
+		phylink_set(mask, 10000baseLR_Full);
 		phylink_set(mask, 10000baseCR_Full);
 	}
 	if (state->interface == PHY_INTERFACE_MODE_INTERNAL) {
@@ -382,6 +383,7 @@ static void rtl93xx_phylink_validate(struct dsa_switch *ds, int port,
 		phylink_set(mask, 10000baseKR_Full);
 		phylink_set(mask, 10000baseT_Full);
 		phylink_set(mask, 10000baseSR_Full);
+		phylink_set(mask, 10000baseLR_Full);
 		phylink_set(mask, 10000baseCR_Full);
 	}
 
