@@ -1769,7 +1769,7 @@ void rtl9300_force_sds_mode(int sds, phy_interface_t phy_if)
 
 	// Toggle LC or Ring
 	for (i = 0; i < 20; i++) {
-		mdelay(200);
+		mdelay(10);
 
 		rtl930x_write_sds_phy(lane_0, 0x1f, 2, 53);
 
