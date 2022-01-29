@@ -219,7 +219,7 @@ void rtl9300_sds_rst(int sds_num, u32 mode)
 		       0x02A4, 0x02A4, 0x0198, 0x0198 };
 	u8  lsb[]  = { 0, 6, 12, 18, 0, 6, 12, 18, 0, 6, 0, 6};
 
-	pr_info("%s %d\n", __func__, mode);
+	pr_info("%s sds %d mode %d\n", __func__, sds_num, mode);
 	if (sds_num < 0 || sds_num > 11) {
 		pr_err("Wrong SerDes number: %d\n", sds_num);
 		return;
