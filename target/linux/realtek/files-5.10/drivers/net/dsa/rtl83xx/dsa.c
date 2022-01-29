@@ -810,8 +810,15 @@ static void rtl93xx_phylink_mac_config(struct dsa_switch *ds, int port,
 	case SPEED_1000:
 		reg |= 2 << 3;
 		break;
+	case SPEED_100:
+		reg |= 1 << 3;
+		break;
+	case SPEED_10:
+		reg |= 0 << 3; // No-op
+		break;
 	default:
 		reg |= 2 << 3;
+		pr_info("%s: unknown speed - defaulting to 1000M\n", __func__);
 		break;
 	}
 
